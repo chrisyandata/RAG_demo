@@ -33,47 +33,55 @@ docs = [
 {"id": "5", "txt": "Vector databases store data as high-dimensional vectors and enable efficient  similarity search. They are essential for modern AI applications, particularly in semantic search  and retrieval systems. Common examples include Pinecone, Weaviate, and Chroma."} 
 ]
 
-def vectorize_document(decisions):
+def vectorize_document(docs):
   vectorizer = TfidfVectorizer() 
   vectors = vectorizer.fit_transform([x["txt"] for x in docs]) 
   return vectorizer, vectors
 
 
-retrieved_docs = [] 
-answer = "" 
-problems = [] 
-score = 1.0 
-is_valid = False 
-temp_storage = {} 
-
-# i = 2 
-# while i < len(sys.argv): 
-# if sys.argv[i] == "-k": 
-# k = int(sys.argv[i+1]) 
-# i += 2 
-# elif sys.argv[i] == "--json":
-# use_json = True 
-# i += 1 
-# else: 
-# i += 1 
 # retrieved_docs = [] 
 # answer = "" 
 # problems = [] 
 # score = 1.0 
-temp_storage["question"] = question 
+# is_valid = False 
+# temp_storage = {} 
+
+# # i = 2 
+# # while i < len(sys.argv): 
+# # if sys.argv[i] == "-k": 
+# # k = int(sys.argv[i+1]) 
+# # i += 2 
+# # elif sys.argv[i] == "--json":
+# # use_json = True 
+# # i += 1 
+# # else: 
+# # i += 1 
+# # retrieved_docs = [] 
+# # answer = "" 
+# # problems = [] 
+# # score = 1.0 
+# temp_storage["question"] = question 
+
+def retreive_docs(question, vectorizer, vectors, k):
+  query_vec = vectorizer.transform([question]) 
+  similarities = cosine_similarity(query_vec, vectors)[0] 
+  #order docs by similarirty score
+  indices = np.argsort(similarities)[-k:][::-1] 
+  for i in indices: 
+    if similarities[i] > 0 and len(retrieved_docs) < k: 
+      retrieved_docs.append({"doc": docs[i], "score": float(similarities[i])}) 
+      # if : 
+      #   break
+  return retreive_docs
 
 
-def get_data(): 
-global retrieved_docs, temp_storage 
-query_vec = vectorizer.transform([question]) 
-similarities = cosine_similarity(query_vec, vectors)[0] 
-indices = np.argsort(similarities)[-k:][::-1] 
-temp_storage["sims"] = similarities 
-for i in indices: 
-if similarities[i] > 0: 
-retrieved_docs.append({"doc": docs[i], "score": float(similarities[i])}) if len(retrieved_docs) >= k: 
-break 
-get_data()
+# def get_data(): 
+# global retrieved_docs, temp_storage 
+
+# temp_storage["sims"] = similarities 
+
+ 
+# get_data()
 if len(retrieved_docs) == 0: 
 answer = "idk" 
 problems.append("no docs") 
@@ -143,13 +151,14 @@ else:
 print(f"\nCritique: ISSUES (confidence: {score:.2f})") 
 if len(problems) > 0: 
 print("Problems: %s" % ', '.join(problems)) 
-result = { 
-"answer": answer, 
-"citations": retrieved_docs, 
-"critique": {"ok": is_valid, "score": score, "problems": problems} 
-} 
-if use_json: 
-print(json.dumps(result, indent=2)) 
+
+
+
+def parse_arguments()"
+  parse = argparse.ArgumentParser()
+  parser.add_argument('-q', '--question', type=str, required = True, help = "Question string")
+  parser.add_argument('-k', type=str, required = True, help = "Number of documents to retrieve")
+  Parser.add_argument('-j', '--json', type = bool, Required = True, help = 'Require JSON output or not')
 
 def main():
   # if len(sys.argv) < 2: 
@@ -159,10 +168,16 @@ def main():
   # question = sys.argv[1] 
   # k = 3 
   # use_json = False  
-  parse = argparse.ArgumentParser()
-  parser.add_argument('-q', '--question', type=str, required = True, help = "Question string")
-  parser.add_argument('-k', type=str, required = True, help = "Number of documents to retrieve")
-  Parser.add_argument('-j', '--json', type = bool, Required = True, help = 'Require JSON output or not')
+  question, k, use_json = parse_arguments(sys.argv)
+
+
+  result = { 
+  "answer": answer, 
+  "citations": retrieved_docs, 
+  "critique": {"ok": is_valid, "score": score, "problems": problems} 
+  } 
+  if use_json: 
+    print(json.dumps(result, indent=2)) 
 
 if __name__ == "__main__":
     main()
