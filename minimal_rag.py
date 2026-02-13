@@ -13,12 +13,18 @@ import json
 from sklearn.feature_extraction.text import TfidfVectorizer 
 from sklearn.metrics.pairwise import cosine_similarity 
 from transformers import pipeline 
-try: 
-print("loading model...") 
-llm = pipeline("text-generation", model="gpt2", max_new_tokens=256) 
-print("model loaded") 
-except: 
-pass 
+import argparse
+
+def load_model( model="gpt2"):
+  try: 
+    print("loading model...") 
+    llm = pipeline("text-generation", model=model, max_new_tokens=256) 
+    print(f"model {model} loaded") 
+  except Exception as e: 
+    print("Error loading model: {e}") 
+    sys.exit(1)
+
+# knoledge base
 docs = [ 
 {"id": "1", "txt": "Python is a high-level, interpreted programming language. It was created by  Guido van Rossum and first released in 1991. Python emphasizes code readability with its  notable use of significant whitespace."}, 
 {"id": "2", "txt": "FastAPI is a modern, fast web framework for building APIs with Python 3.7+.  It is based on standard Python type hints and provides automatic API documentation. FastAPI is  one of the fastest Python frameworks available."}, 
@@ -26,34 +32,37 @@ docs = [
 {"id": "4", "txt": "RAG (Retrieval-Augmented Generation) combines information retrieval with  text generation. It retrieves relevant documents from a knowledge base and uses them to  generate informed, contextual answers. This approach improves accuracy and reduces  hallucinations."}, 
 {"id": "5", "txt": "Vector databases store data as high-dimensional vectors and enable efficient  similarity search. They are essential for modern AI applications, particularly in semantic search  and retrieval systems. Common examples include Pinecone, Weaviate, and Chroma."} 
 ]
-vectorizer = TfidfVectorizer() 
-vectors = vectorizer.fit_transform([x["txt"] for x in docs]) 
+
+def vectorize_document(decisions):
+  vectorizer = TfidfVectorizer() 
+  vectors = vectorizer.fit_transform([x["txt"] for x in docs]) 
+  return vectorizer, vectors
+
+
 retrieved_docs = [] 
 answer = "" 
 problems = [] 
 score = 1.0 
 is_valid = False 
 temp_storage = {} 
-if len(sys.argv) < 2: 
-print("usage: python minimal-rag.py <question> [-k NUM] [--json]") print("example: python minimal-rag.py 'What is RAG?' -k 2 --json") sys.exit(1) 
-question = sys.argv[1] 
-k = 3 
-use_json = False 
-i = 2 
-while i < len(sys.argv): 
-if sys.argv[i] == "-k": 
-k = int(sys.argv[i+1]) 
-i += 2 
-elif sys.argv[i] == "--json":
-use_json = True 
-i += 1 
-else: 
-i += 1 
-retrieved_docs = [] 
-answer = "" 
-problems = [] 
-score = 1.0 
+
+# i = 2 
+# while i < len(sys.argv): 
+# if sys.argv[i] == "-k": 
+# k = int(sys.argv[i+1]) 
+# i += 2 
+# elif sys.argv[i] == "--json":
+# use_json = True 
+# i += 1 
+# else: 
+# i += 1 
+# retrieved_docs = [] 
+# answer = "" 
+# problems = [] 
+# score = 1.0 
 temp_storage["question"] = question 
+
+
 def get_data(): 
 global retrieved_docs, temp_storage 
 query_vec = vectorizer.transform([question]) 
@@ -141,3 +150,19 @@ result = {
 } 
 if use_json: 
 print(json.dumps(result, indent=2)) 
+
+def main():
+  # if len(sys.argv) < 2: 
+  #   print("usage: python minimal-rag.py <question> [-k NUM] [--json]") 
+  #   print("example: python minimal-rag.py 'What is RAG?' -k 2 --json") 
+  #   sys.exit(1) 
+  # question = sys.argv[1] 
+  # k = 3 
+  # use_json = False  
+  parse = argparse.ArgumentParser()
+  parser.add_argument('-q', '--question', type=str, required = True, help = "Question string")
+  parser.add_argument('-k', type=str, required = True, help = "Number of documents to retrieve")
+  Parser.add_argument('-j', '--json', type = bool, Required = True, help = 'Require JSON output or not')
+
+if __name__ == "__main__":
+    main()
