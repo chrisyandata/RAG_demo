@@ -14,24 +14,27 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity 
 from transformers import pipeline 
 import argparse
+import warnings
+warnings.filterwarnings('ignore')
 
 def load_model( model="gpt2"):
   try: 
     print("loading model...") 
     llm = pipeline("text-generation", model=model, max_new_tokens=256) 
     print(f"model {model} loaded") 
+    return llm
   except Exception as e: 
     print("Error loading model: {e}") 
     sys.exit(1)
 
 # knoledge base
 docs = [ 
-{"id": "1", "txt": "Python is a high-level, interpreted programming language. It was created by  Guido van Rossum and first released in 1991. Python emphasizes code readability with its  notable use of significant whitespace."}, 
-{"id": "2", "txt": "FastAPI is a modern, fast web framework for building APIs with Python 3.7+.  It is based on standard Python type hints and provides automatic API documentation. FastAPI is  one of the fastest Python frameworks available."}, 
-{"id": "3", "txt": "Machine learning is a subset of artificial intelligence that enables systems to  learn and improve from experience. It uses algorithms to parse data, learn from it, and make  predictions or decisions without being explicitly programmed."}, 
-{"id": "4", "txt": "RAG (Retrieval-Augmented Generation) combines information retrieval with  text generation. It retrieves relevant documents from a knowledge base and uses them to  generate informed, contextual answers. This approach improves accuracy and reduces  hallucinations."}, 
-{"id": "5", "txt": "Vector databases store data as high-dimensional vectors and enable efficient  similarity search. They are essential for modern AI applications, particularly in semantic search  and retrieval systems. Common examples include Pinecone, Weaviate, and Chroma."} 
-]
+  {"id": "1", "txt": "Python is a high-level, interpreted programming language. It was created by  Guido van Rossum and first released in 1991. Python emphasizes code readability with its  notable use of significant whitespace."}, 
+  {"id": "2", "txt": "FastAPI is a modern, fast web framework for building APIs with Python 3.7+.  It is based on standard Python type hints and provides automatic API documentation. FastAPI is  one of the fastest Python frameworks available."}, 
+  {"id": "3", "txt": "Machine learning is a subset of artificial intelligence that enables systems to  learn and improve from experience. It uses algorithms to parse data, learn from it, and make  predictions or decisions without being explicitly programmed."}, 
+  {"id": "4", "txt": "RAG (Retrieval-Augmented Generation) combines information retrieval with  text generation. It retrieves relevant documents from a knowledge base and uses them to  generate informed, contextual answers. This approach improves accuracy and reduces  hallucinations."}, 
+  {"id": "5", "txt": "Vector databases store data as high-dimensional vectors and enable efficient  similarity search. They are essential for modern AI applications, particularly in semantic search  and retrieval systems. Common examples include Pinecone, Weaviate, and Chroma."} 
+  ]
 
 def vectorize_document(docs):
   vectorizer = TfidfVectorizer() 
@@ -67,12 +70,13 @@ def retreive_docs(question, vectorizer, vectors, k):
   similarities = cosine_similarity(query_vec, vectors)[0] 
   #order docs by similarirty score
   indices = np.argsort(similarities)[-k:][::-1] 
+  retrieved_docs = []
   for i in indices: 
     if similarities[i] > 0 and len(retrieved_docs) < k: 
       retrieved_docs.append({"doc": docs[i], "score": float(similarities[i])}) 
       # if : 
       #   break
-  return retreive_docs
+  return retrieved_docs
 
 
 # def get_data(): 
@@ -82,83 +86,92 @@ def retreive_docs(question, vectorizer, vectors, k):
 
  
 # get_data()
-if len(retrieved_docs) == 0: 
-answer = "idk" 
-problems.append("no docs") 
-score = score * 0.4 
-is_valid = False 
-print("\nQ: {}".format(question)) 
-print(f"\nA: {answer}\n") 
-print("Citations: None") 
-print("\nCritique: ISSUES (confidence: {:.2f})".format(score)) 
-print("Problems: %s" % ', '.join(problems)) 
-if use_json: 
-print(json.dumps({"answer": answer, "citations": retrieved_docs, "critique": {"ok": is_valid,  "score": score, "problems": problems}}, indent=2)) 
-sys.exit(0) 
-def call_model(): 
-global answer, temp_storage 
-ctx = "" 
-counter = 0 
-for r in retrieved_docs: 
-counter += 1 
-ctx += f"[{counter}] {r['doc']['txt']}\n\n" 
-temp_storage["context"] = ctx 
-prompt = "Context:\n{}\nQuestion: {}\n\nAnswer the question based only on the context  above. Cite sources using [1], [2], etc. Be concise.\n\nAnswer:".format(ctx,  temp_storage['question'])
-output = llm(prompt) 
-answer = output[0]['generated_text'].split("Answer:")[-1].strip() 
-if answer == "": 
-answer = "idk" 
-call_model() 
-def validate_output(): 
-global problems, score, is_valid 
-problems = [] 
-score = 1.0 
-if "idk" in answer.lower(): 
-problems.append("no info") 
-score = score * 0.5 
-if len(answer) < 20: 
-problems.append("short") 
-score = score * 0.3 
-refs = re.findall(r'\[(\d+)\]', answer) 
-if len(retrieved_docs) > 0: 
-if len(refs) == 0: 
-problems.append("no refs")
-score = score * 0.7 
-avg = 0 
-for r in retrieved_docs: 
-avg += r["score"] 
-avg = avg / len(retrieved_docs) 
-if avg < 0.1: 
-problems.append("low relevance") score = score * 0.6 
-if score > 0.6: 
-if len(problems) < 3: 
-is_valid = True 
-else: 
-is_valid = False 
-else: 
-is_valid = False 
-validate_output() 
-print("\nQ: {}".format(question)) print(f"\nA: {answer}\n") 
-print("Citations:") 
-for r in retrieved_docs:
-doc_text = r['doc']['txt'] 
-if len(doc_text) > 80: 
-doc_text = doc_text[:80] + "..." 
-print(" [{}] (score: {:.3f}) {}".format(r['doc']['id'], r['score'], doc_text)) 
-if is_valid: 
-print("\nCritique: OK (confidence: {:.2f})".format(score)) 
-else: 
-print(f"\nCritique: ISSUES (confidence: {score:.2f})") 
-if len(problems) > 0: 
-print("Problems: %s" % ', '.join(problems)) 
+
+def generate_answer(question, retrieved_docs, llm):
+  # problem = []
+  # score = 1.0
+  # is_valid = False
+  if len(retrieved_docs) == 0: 
+    answer = "idk" 
+    # problems.append("no docs") 
+    # score = score * 0.4 
+    # is_valid = False 
+    # print("\nQ: {}".format(question)) 
+    # print(f"\nA: {answer}\n") 
+    # print("Citations: None") 
+    # print("\nCritique: ISSUES (confidence: {:.2f})".format(score)) 
+    # print("Problems: %s" % ', '.join(problems)) 
+
+  context = '\n'.join([f"[{i+1}] {doc['doc']['txt']}"  for i,doc in enumerate(retrieved_docs)])
+  prompt = """
+  Context:
+  {}
+
+  Question: {}
+
+  Answer the question based only on the context  above. 
+  Each claim shall explicitly cite sources using [1], [2], etc from the corresponding context content if possible. 
+  Be concise. 
+  If you don't know, just say 'idk'. 
+  
+  Answer:""".format(context,  question)
+  prompt = "Context:\n{}\nQuestion: {}\n\nAnswer the question based only on the context  above. Cite sources using [1], [2], etc. Be concise.\n\nAnswer:".format(context,  question)
+  # print(prompt)
+  output = llm(prompt) 
+  print(output)
+  answer = output[0]['generated_text'].split("Answer:")[-1].strip() 
+  if answer == "": 
+    answer = "idk" 
+  return answer
+
+# def call_model(): 
+# global answer, temp_storage 
+# ctx = "" 
+# counter = 0 
+# for r in retrieved_docs: 
+# counter += 1 
+# ctx += f"[{counter}] {r['doc']['txt']}\n\n" 
+# temp_storage["context"] = ctx 
+# prompt = "Context:\n{}\nQuestion: {}\n\nAnswer the question based only on the context  above. Cite sources using [1], [2], etc. Be concise.\n\nAnswer:".format(ctx,  temp_storage['question'])
+# output = llm(prompt) 
+# answer = output[0]['generated_text'].split("Answer:")[-1].strip() 
+
+# call_model() 
+def validate_output(answer, retrieved_docs): 
+  problems = []
+  score = 1.0
+  # is_valid = False
+
+  if "idk" in answer.lower(): 
+    problems.append("no info") 
+    score = score * 0.5 
+
+  if len(answer) < 20: 
+    problems.append("short") 
+    score = score * 0.3 
+
+  refs = re.findall(r'\[(\d+)\]', answer) 
+  if len(retrieved_docs) > 0 and not refs: 
+    problems.append("no refs")
+    score = score * 0.7 
+  if retrieved_docs:
+    avg_score = np.mean([doc['score'] for doc in retrieved_docs])
+  else:
+    avg_score = 0
+
+  if avg_score < 0.1: 
+    problems.append("low relevance") 
+    score = score * 0.6 
+
+  if score > 0.6 and len(problems) < 3: 
+    is_valid = True 
+  else: 
+    is_valid = False 
+  return problems, score, is_valid
+
+ 
 
 
-
-def parse_arguments()"
-  parse = argparse.ArgumentParser()
-  parser.add_argument('-q', '--question', type=str, required = True, help = "Question string")
-  parser.add_argument('-k', type=str, required = True, help = "Number of documents to retrieve")
-  Parser.add_argument('-j', '--json', type = bool, Required = True, help = 'Require JSON output or not')
 
 def main():
   # if len(sys.argv) < 2: 
@@ -168,8 +181,26 @@ def main():
   # question = sys.argv[1] 
   # k = 3 
   # use_json = False  
-  question, k, use_json = parse_arguments(sys.argv)
+  parser = argparse.ArgumentParser(description="usage: python minimal-rag.py -q <question> [-k NUM] [-j Bool] [-m Model] \n example: python minimal-rag.py 'What is RAG?'")
+  parser.add_argument('-q', '--question', type=str, default = "What is RAG?", help = "Question string")
+  parser.add_argument('-k', type=str, default = 3, help = "Number of documents to retrieve")
+  parser.add_argument('-j', '--json', type = int, default = 1, help = 'Require JSON output or not, 1 or 0')
+  parser.add_argument('-m', '--model', type = str, default = 'gpt2', help = 'HuggingFace model to choose ')
+  args = parser.parse_args()
+  print(args)
 
+  question, k, use_json, model = args.question, int(args.k), bool(args.json), args.model
+
+  llm = load_model( model=model)
+
+  vectorizer, vectors = vectorize_document(docs)
+
+  retrieved_docs = retreive_docs(question, vectorizer, vectors, k)
+  # print(retrieved_docs)
+
+  answer = generate_answer(question, retrieved_docs, llm)
+
+  problems, score, is_valid = validate_output(answer, retrieved_docs)
 
   result = { 
   "answer": answer, 
@@ -178,6 +209,23 @@ def main():
   } 
   if use_json: 
     print(json.dumps(result, indent=2)) 
+  else:
+    print("\nQ: {}".format(question)) 
+    print(f"\nA: {answer}\n") 
+    print("Citations:") 
+
+    for r in retrieved_docs:
+      doc_text = r['doc']['txt'] 
+      if len(doc_text) > 80: 
+        doc_text = doc_text[:80] + "..." 
+      print(" [{}] (score: {:.3f}) {}".format(r['doc']['id'], r['score'], doc_text)) 
+    if is_valid: 
+      print("\nCritique: OK (confidence: {:.2f})".format(score)) 
+    else: 
+      print(f"\nCritique: ISSUES (confidence: {score:.2f})") 
+    if len(problems) > 0: 
+      print("Problems: %s" % ', '.join(problems))  
+  
 
 if __name__ == "__main__":
     main()
